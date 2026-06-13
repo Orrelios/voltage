@@ -1347,6 +1347,46 @@
   .discover-banner { background:linear-gradient(135deg,#0f1f3d 0%,#172240 50%,#131c2e 100%);border:1px solid rgba(201,168,76,0.2);border-radius:var(--radius-lg);padding:28px;text-align:center;margin-bottom:20px;position:relative;overflow:hidden; }
   .discover-banner::before { content:'\01F465';position:absolute;font-size:120px;opacity:0.04;top:-20px;right:-20px;pointer-events:none; }
   @media(max-width:860px){.group-stat-bar-wrap{width:70px;}.podium{gap:6px;}}
+
+  /* ════ YEAR CURRICULUM / LOCKED TOPICS ════ */
+  .locked-topic-card { cursor:default !important; opacity:0.65; }
+  .locked-topic-card:hover { transform:none !important; border-color:var(--border) !important; box-shadow:none !important; }
+  .locked-badge {
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 12px;
+    background:rgba(107,122,153,0.12);
+    border:1px dashed var(--border-light);
+    border-radius:8px;
+    font-size:12px;font-weight:600;color:var(--muted-light);
+  }
+  .mega-quiz-bar { display:flex;flex-direction:column;gap:10px;margin-bottom:20px; }
+
+  /* ════ WRONG ANSWERS ════ */
+  .wrong-topic-group { margin-bottom:24px; }
+  .wrong-topic-header {
+    display:flex;align-items:center;gap:10px;
+    font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;
+    color:var(--muted);margin-bottom:10px;padding-bottom:6px;
+    border-bottom:1px solid var(--border);
+  }
+
+  /* ════ NOTES ════ */
+  .notes-textarea {
+    width:100%;
+    background:var(--navy-light);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px 16px;
+    color:var(--text);
+    font-size:14px;
+    outline:none;
+    transition:border-color 0.2s;
+    resize:vertical;
+    min-height:320px;
+    font-family:inherit;
+    line-height:1.7;
+  }
+  .notes-textarea:focus { border-color:var(--gold); }
 </style>
 </head>
 <body>
@@ -1377,6 +1417,21 @@
     <div style="display:flex;gap:10px;">
       <button class="btn btn-primary btn-full" onclick="saveApiKey()">Save Key</button>
       <button class="btn btn-secondary" onclick="closeModal('apiModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────────────── IMPORT MODAL ─────────────────────────────── -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('importModal')">&#x2715;</button>
+    <div class="modal-title">📥 Import Voltage Data</div>
+    <div class="modal-desc">Choose how to handle the imported data:</div>
+    <div id="importSummary"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn btn-danger btn-full" id="importBtnReplace">🔄 Replace All Data</button>
+      <button class="btn btn-primary btn-full" id="importBtnMerge">🔀 Merge with Existing</button>
+      <button class="btn btn-ghost btn-full" id="importBtnCancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -1442,6 +1497,14 @@
       <div class="nav-section-label">Track</div>
       <div class="nav-item" onclick="navigate('progress')" data-page="progress">
         <span class="nav-icon">📊</span> My Progress
+      </div>
+      <div class="nav-item" onclick="navigate('wrong-answers')" data-page="wrong-answers">
+        <span class="nav-icon">❌</span> Wrong Answers
+        <span class="nav-badge" id="wrongAnswersBadge" style="display:none;"></span>
+      </div>
+      <div class="nav-section-label">Tools</div>
+      <div class="nav-item" onclick="navigate('notes')" data-page="notes">
+        <span class="nav-icon">📓</span> Notes
       </div>
       <div class="nav-section-label">Reference</div>
       <div class="nav-item" onclick="navigate('topics')" data-page="topics">
@@ -1534,12 +1597,8 @@
               <div class="card-header">
                 <div class="card-title">⚡ Quick Start</div>
               </div>
-              <div style="display:flex;flex-direction:column;gap:10px;">
-                <button class="btn btn-secondary btn-full" onclick="startQuickQuiz('nec')">📗 NEC Code Quiz</button>
-                <button class="btn btn-secondary btn-full" onclick="startQuickQuiz('ohm')">🔢 Ohm's Law & Calculations</button>
-                <button class="btn btn-secondary btn-full" onclick="startQuickQuiz('safety')">🦺 OSHA / NFPA 70E Safety</button>
-                <button class="btn btn-secondary btn-full" onclick="startQuickQuiz('motors')">⚙️ Motor Controls</button>
-                <button class="btn btn-secondary btn-full" onclick="startQuickQuiz('conduit')">🔧 Conduit Bending</button>
+              <div style="display:flex;flex-direction:column;gap:10px;" id="quickStartButtons">
+                <!-- Rendered by renderQuickStart() -->
               </div>
             </div>
             <div class="card">
@@ -1774,6 +1833,7 @@
                 <option value="Year 2">Year 2</option>
                 <option value="Year 3">Year 3</option>
                 <option value="Year 4">Year 4</option>
+                <option value="Year 5">Year 5</option>
                 <option value="Journeyman">Journeyman</option>
               </select>
             </div>
@@ -1848,7 +1908,57 @@
               <button class="btn btn-danger btn-sm" onclick="clearFiles()">Clear</button>
             </div>
           </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Backup &amp; Restore</div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Export Data</div>
+                <div class="settings-row-desc">Download all your data as a <code style="font-size:11px;color:var(--gold);">.voltage</code> backup file</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="exportData()">⬇️ Export</button>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Import Data</div>
+                <div class="settings-row-desc">Restore from a <code style="font-size:11px;color:var(--gold);">.voltage</code> backup file</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="importData()">⬆️ Import</button>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <!-- ─── WRONG ANSWERS PAGE ─── -->
+      <div id="page-wrong-answers" class="page-section">
+        <div class="section-header">
+          <div>
+            <div class="section-title">Wrong Answers</div>
+            <div class="section-desc">Questions you've missed — grouped by topic for targeted re-drilling.</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="startReDrill()">🔁 Re-Drill</button>
+            <button class="btn btn-danger" onclick="clearWrongAnswers()">🗑️ Clear All</button>
+          </div>
+        </div>
+        <div id="wrongAnswersContent">
+          <div class="empty-state">
+            <span class="empty-icon">✅</span>
+            <div class="empty-title">No wrong answers saved</div>
+            <div class="empty-desc">Complete a quiz to start tracking missed questions here.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── NOTES PAGE ─── -->
+      <div id="page-notes" class="page-section">
+        <div class="section-header">
+          <div>
+            <div class="section-title">📓 My Notes</div>
+            <div class="section-desc">Personal study notes by subject — they save to your browser automatically.</div>
+          </div>
+        </div>
+        <div id="notesContainer"><div class="empty-state"><span class="spinner"></span></div></div>
       </div>
 
     </div>
@@ -1879,7 +1989,8 @@ const state = {
   cardKnown: [],
   progressChart: null,
   year: localStorage.getItem('voltage_year') || 'Year 1',
-  fileContents: {}
+  fileContents: {},
+  isReDrill: false
 };
 
 // ═══════════════════════════════════════
@@ -1891,6 +2002,7 @@ function init() {
   updateApiKeyStatus();
   buildTopicsGrid();
   renderDashboard();
+  updateWrongAnswersBadge();
 }
 
 // ═══════════════════════════════════════
@@ -1979,6 +2091,7 @@ function loginSuccess(user) {
   document.getElementById('topbarYearBadge').textContent = state.year;
   document.getElementById('yearSelect').value = state.year;
   renderDashboard();
+  renderQuickStart();
   init();
 }
 
@@ -2000,7 +2113,8 @@ function signOut() {
 // ═══════════════════════════════════════
 const PAGE_TITLES = {
   dashboard: 'Dashboard', upload: 'Upload Materials', quiz: 'Quiz',
-  flashcards: 'Flashcards', progress: 'My Progress', topics: 'Study Topics', settings: 'Settings'
+  flashcards: 'Flashcards', progress: 'My Progress', topics: 'Study Topics',
+  settings: 'Settings', 'wrong-answers': 'Wrong Answers', notes: 'Notes'
 };
 
 function navigate(page) {
@@ -2013,6 +2127,9 @@ function navigate(page) {
   closeSidebar();
   if (page === 'progress') renderProgress();
   if (page === 'dashboard') renderDashboard();
+  if (page === 'wrong-answers') renderWrongAnswers();
+  if (page === 'notes') renderNotes();
+  if (page === 'topics') buildTopicsGrid();
 }
 
 function toggleSidebar() {
@@ -2239,18 +2356,123 @@ const TOPIC_INFO = [
   { id:'wiring', icon:'🔌', title:'Wiring Methods', desc:'Cable types, conduit fill, ampacity tables, derating factors, and installation methods.' },
 ];
 
+// ═══════════════════════════════════════════════
+// YEAR CURRICULUM
+// ═══════════════════════════════════════════════
+const ALL_YEAR_TOPICS = [
+  { id:'y1_math',     bankId:'ohm',       year:1,  displayName:'Technical Math I',        icon:'🔢', desc:"Ohm's Law, basic electrical formulas, and unit conversions." },
+  { id:'y1_print',    bankId:'wiring',    year:1,  displayName:'Print Reading I',          icon:'📐', desc:'Blueprint basics, schematic symbols, and basic wiring diagrams.' },
+  { id:'y1_const',    bankId:'safety',    year:1,  displayName:'Construction Technology',  icon:'🏗️', desc:'Job site safety, OSHA basics, and construction fundamentals.' },
+  { id:'y1_circuit',  bankId:'nec',       year:1,  displayName:'Electrical Circuitry',     icon:'⚡', desc:'Basic circuits, NEC code introduction, and branch circuit rules.' },
+  { id:'y1_conduit',  bankId:'conduit',   year:1,  displayName:'Conduit Bending I',        icon:'🔧', desc:'Basic conduit bending, 90° bends, offsets, and take-up.' },
+  { id:'y2_math',     bankId:'ohm',       year:2,  displayName:'Technical Math II',        icon:'📊', desc:'Power formulas, three-phase calculations, and circuit analysis.' },
+  { id:'y2_print',    bankId:'load',      year:2,  displayName:'Print Reading II',         icon:'📋', desc:'Advanced blueprints, load schedules, and single-line diagrams.' },
+  { id:'y2_motor',    bankId:'motors',    year:2,  displayName:'Motor Control',            icon:'⚙️', desc:'Motor starters, control circuits, and NEC Article 430.' },
+  { id:'y2_conduit',  bankId:'conduit',   year:2,  displayName:'Conduit Bending II',       icon:'🔧', desc:'Concentric bends, parallel offsets, and rolling offsets.' },
+  { id:'y2_pv',       bankId:'grounding', year:2,  displayName:'Photovoltaics',            icon:'☀️', desc:'Solar PV systems, inverters, grounding, and NEC Article 690.' },
+  { id:'y3_hvac',     bankId:'safety',    year:3,  displayName:'HVAC',                     icon:'🌡️', desc:'HVAC controls, equipment wiring, and motor applications.' },
+  { id:'y3_power',    bankId:'nec',       year:3,  displayName:'Electrical Power Systems', icon:'🔋', desc:'Transformers, switchgear, substations, and power distribution.' },
+  { id:'y3_blueprint',bankId:'load',      year:3,  displayName:'Commercial Blueprints',    icon:'🏢', desc:'Commercial drawings, load calculations, and panel schedules.' },
+  { id:'y3_lv',       bankId:'wiring',    year:3,  displayName:'Low Voltage Systems',      icon:'📡', desc:'Fire alarm, data, security, and low-voltage installations.' },
+  { id:'y3_plc',      bankId:'motors',    year:3,  displayName:'Programmable Control',     icon:'🖥️', desc:'PLCs, motor drives, VFDs, and industrial automation.' },
+  { id:'y4_safety',   bankId:'safety',    year:4,  displayName:'Safety & Leadership',      icon:'🦺', desc:'Advanced PPE, arc flash, foreman skills, and job leadership.' },
+  { id:'y4_nec',      bankId:'nec',       year:4,  displayName:'NEC Code Review',          icon:'📗', desc:'Comprehensive NEC review for the journeyman licensing exam.' },
+  { id:'y4_ground',   bankId:'grounding', year:4,  displayName:'Grounding & Bonding',      icon:'🌍', desc:'Advanced grounding systems, GES, and NEC Article 250.' },
+  { id:'y4_load',     bankId:'load',      year:4,  displayName:'Service & Feeders',        icon:'⚡', desc:'Service entrance sizing, feeder calcs, and demand factors.' },
+  { id:'y4_control',  bankId:'motors',    year:4,  displayName:'Industrial Controls',      icon:'🏭', desc:'Industrial motor control, drives, and automation systems.' },
+  { id:'y5_safety',   bankId:'safety',    year:5,  displayName:'Safety & Leadership',      icon:'🦺', desc:'Advanced PPE, arc flash, foreman skills, and job leadership.' },
+  { id:'y5_nec',      bankId:'nec',       year:5,  displayName:'NEC Code Review',          icon:'📗', desc:'Comprehensive NEC review for the journeyman licensing exam.' },
+  { id:'y5_ground',   bankId:'grounding', year:5,  displayName:'Grounding & Bonding',      icon:'🌍', desc:'Advanced grounding systems, GES, and NEC Article 250.' },
+  { id:'y5_load',     bankId:'load',      year:5,  displayName:'Service & Feeders',        icon:'⚡', desc:'Service entrance sizing, feeder calcs, and demand factors.' },
+  { id:'y5_control',  bankId:'motors',    year:5,  displayName:'Industrial Controls',      icon:'🏭', desc:'Industrial motor control, drives, and automation systems.' },
+  { id:'jm_ohm',      bankId:'ohm',       year:99, displayName:"Ohm's Law Master",        icon:'🎓', desc:'Complete electrical calculations master review for journeyman level.' },
+  { id:'jm_wiring',   bankId:'wiring',    year:99, displayName:'Advanced Wiring Methods',  icon:'🔌', desc:'All wiring methods, conduit fill, ampacity tables, and derating.' },
+];
+
+function getNumericYear() {
+  return ({'Year 1':1,'Year 2':2,'Year 3':3,'Year 4':4,'Year 5':5,'Journeyman':99})[state.year] || 1;
+}
+
+function getUnlockLabel(yr) { return yr >= 99 ? 'Journeyman' : 'Year ' + yr; }
+
 function buildTopicsGrid() {
   const grid = document.getElementById('topicsGrid');
-  grid.innerHTML = '<div class="grid-2" style="gap:14px;">' +
-    TOPIC_INFO.map(t => `
-      <div class="card" style="cursor:pointer;transition:all 0.2s;" onmouseenter="this.style.borderColor='rgba(201,168,76,0.4)'" onmouseleave="this.style.borderColor='var(--border)'" onclick="startQuickQuiz('${t.id}')">
+  if (!grid) return;
+  const numYear = getNumericYear();
+  const isJourneyman = numYear >= 99;
+  let html = '';
+
+  if (numYear >= 2) {
+    html += '<div class="mega-quiz-bar">';
+    html += '<button class="btn btn-primary btn-full" onclick="startMegaQuiz(1,25)">🏆 Year 1 Mega Quiz — 25 Questions</button>';
+    if (numYear >= 3) html += '<button class="btn btn-primary btn-full" onclick="startMegaQuiz(2,30)">🏆 Years 1 &amp; 2 Mega Quiz — 30 Questions</button>';
+    if (numYear >= 4 || isJourneyman) html += '<button class="btn btn-primary btn-full" onclick="startMegaQuiz(3,40)">🏆 Years 1–3 Mega Quiz — 40 Questions</button>';
+    html += '</div>';
+  }
+
+  const seen = new Set();
+  html += '<div class="grid-2" style="gap:14px;">';
+  ALL_YEAR_TOPICS.forEach(t => {
+    if (t.year >= 99 && !isJourneyman) return;
+    if (seen.has(t.displayName)) return;
+    seen.add(t.displayName);
+    const unlocked = isJourneyman || t.year <= numYear;
+    if (unlocked) {
+      html += `<div class="card" style="cursor:pointer;transition:all 0.2s;" onmouseenter="this.style.borderColor='rgba(201,168,76,0.4)'" onmouseleave="this.style.borderColor='var(--border)'" onclick="startQuickQuiz('${t.bankId}')">
         <div style="font-size:28px;margin-bottom:12px;">${t.icon}</div>
-        <div style="font-size:15px;font-weight:700;color:var(--cream);margin-bottom:6px;">${t.title}</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${t.desc}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--cream);margin-bottom:6px;">${escHtml(t.displayName)}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${escHtml(t.desc)}</div>
         <button class="btn btn-secondary btn-sm btn-full">Start Quiz →</button>
-      </div>
-    `).join('') +
-  '</div>';
+      </div>`;
+    } else {
+      html += `<div class="card locked-topic-card">
+        <div style="font-size:28px;margin-bottom:12px;opacity:0.45;">${t.icon}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--muted);margin-bottom:6px;">${escHtml(t.displayName)}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px;opacity:0.7;">${escHtml(t.desc)}</div>
+        <div class="locked-badge">🔒 Unlocks in ${getUnlockLabel(t.year)}</div>
+      </div>`;
+    }
+  });
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+function startMegaQuiz(throughYear, count) {
+  const bankIds = new Set();
+  ALL_YEAR_TOPICS.filter(t => t.year <= throughYear).forEach(t => bankIds.add(t.bankId));
+  let pool = [];
+  bankIds.forEach(id => { if (QUESTION_BANKS[id]) pool.push(...QUESTION_BANKS[id]); });
+  pool = shuffle(pool).slice(0, Math.min(count, pool.length));
+  if (!pool.length) { showToast('No questions available', 'error'); return; }
+  state.isReDrill = false;
+  startQuiz(pool);
+  navigate('quiz');
+  showToast('Mega Quiz started — ' + pool.length + ' questions! ⚡', 'success');
+}
+
+function renderQuickStart() {
+  const el = document.getElementById('quickStartButtons');
+  if (!el) return;
+  const numYear = getNumericYear();
+  const isJourneyman = numYear >= 99;
+  const seen = new Set();
+  const yearTopics = ALL_YEAR_TOPICS.filter(t => {
+    if (t.year >= 99) return false;
+    if (!isJourneyman && t.year !== numYear) return false;
+    if (seen.has(t.displayName)) return false;
+    seen.add(t.displayName);
+    return true;
+  }).slice(0, 5);
+  let html = yearTopics.map(t =>
+    `<button class="btn btn-secondary btn-full" onclick="startQuickQuiz('${t.bankId}')">${t.icon} ${escHtml(t.displayName)}</button>`
+  ).join('');
+  if (numYear >= 2) {
+    const mg = Math.min(numYear - 1, 3);
+    const labs = {1:'Year 1 Mega Quiz', 2:'Years 1 & 2 Mega Quiz', 3:'Years 1–3 Mega Quiz'};
+    const cnts = {1:25, 2:30, 3:40};
+    html += `<button class="btn btn-primary btn-full" onclick="startMegaQuiz(${mg},${cnts[mg]})">🏆 ${labs[mg]}</button>`;
+  }
+  el.innerHTML = html || '<div class="text-muted text-sm" style="padding:8px 0;">No topics found for current year.</div>';
 }
 
 // ═══════════════════════════════════════
@@ -2620,6 +2842,8 @@ function finishQuiz() {
   };
   state.sessions.unshift(session);
   localStorage.setItem('voltage_sessions', JSON.stringify(state.sessions));
+  trackWrongAnswers(quiz, state.answers);
+  state.isReDrill = false;
   renderResults(session, quiz);
 }
 
@@ -2795,6 +3019,7 @@ function markCard(known) {
 // ═══════════════════════════════════════
 function renderDashboard() {
   const sessions = state.sessions;
+  renderQuickStart();
   document.getElementById('statQuizzes').textContent = sessions.length;
   document.getElementById('statFiles').textContent = state.uploadedFiles.length;
   if (sessions.length > 0) {
@@ -2954,8 +3179,10 @@ function updateYear() {
   document.getElementById('sidebarUserRole').textContent = year;
   document.getElementById('topbarYearBadge').textContent = year;
   document.getElementById('difficultySelect').value = {
-    'Year 1':'year1','Year 2':'year2','Year 3':'year3','Year 4':'year4','Journeyman':'journeyman'
+    'Year 1':'year1','Year 2':'year2','Year 3':'year3','Year 4':'year4','Year 5':'year4','Journeyman':'journeyman'
   }[year] || 'year1';
+  buildTopicsGrid();
+  renderQuickStart();
   showToast('Year updated to ' + year, 'success');
 }
 
@@ -3009,6 +3236,264 @@ function shuffle(arr) {
     [a[i],a[j]] = [a[j],a[i]];
   }
   return a;
+}
+
+// ═══════════════════════════════════════
+// WRONG ANSWERS TRACKER
+// ═══════════════════════════════════════
+function getWrongAnswers() {
+  return JSON.parse(localStorage.getItem('voltage_wrong_answers') || '[]');
+}
+function saveWrongAnswers(arr) {
+  localStorage.setItem('voltage_wrong_answers', JSON.stringify(arr));
+  updateWrongAnswersBadge();
+}
+function checkAnswerCorrect(q, answer) {
+  if (q.type === 'mc' || q.type === 'tf') return answer === q.ans;
+  if (q.type === 'fill') {
+    const u = (answer||'').toString().toLowerCase().trim();
+    const c = q.ans.toString().toLowerCase().trim();
+    return u === c || u.includes(c);
+  }
+  return !!(answer && answer.length > 10);
+}
+function detectTopic(q) {
+  const nec = (q.nec||'').toLowerCase();
+  if (nec.includes('250') || nec.includes('grounding') || nec.includes('bonding')) return 'Grounding & Bonding';
+  if (nec.includes('430') || nec.includes('motor')) return 'Motor Controls';
+  if (nec.includes('conduit') || nec.includes('bend')) return 'Conduit Bending';
+  if (nec.includes('ohm') || nec.includes('power') || nec.includes('formula')) return "Ohm's Law & Calculations";
+  if (nec.includes('osha') || nec.includes('nfpa') || nec.includes('safety') || nec.includes('loto')) return 'Safety';
+  if (nec.includes('nec') || nec.includes('210') || nec.includes('300') || nec.includes('230')) return 'NEC Code';
+  return 'General';
+}
+function trackWrongAnswers(quiz, answers) {
+  let wa = getWrongAnswers();
+  quiz.forEach((q, i) => {
+    const ok = checkAnswerCorrect(q, answers[i]);
+    const qKey = q.q.slice(0, 100);
+    if (ok && state.isReDrill) {
+      wa = wa.filter(w => w.qKey !== qKey);
+    } else if (!ok) {
+      const ex = wa.find(w => w.qKey === qKey);
+      if (ex) { ex.attempts = (ex.attempts||1) + 1; }
+      else { wa.push({ qKey, question: q, topic: detectTopic(q), addedAt: new Date().toISOString(), attempts: 1 }); }
+    }
+  });
+  saveWrongAnswers(wa);
+}
+function updateWrongAnswersBadge() {
+  const count = getWrongAnswers().length;
+  const badge = document.getElementById('wrongAnswersBadge');
+  if (!badge) return;
+  badge.textContent = count > 0 ? count : '';
+  badge.style.display = count > 0 ? 'inline-flex' : 'none';
+}
+function renderWrongAnswers() {
+  const wa = getWrongAnswers();
+  const container = document.getElementById('wrongAnswersContent');
+  if (!container) return;
+  if (!wa.length) {
+    container.innerHTML = '<div class="empty-state"><span class="empty-icon">✅</span><div class="empty-title">No wrong answers saved</div><div class="empty-desc">Questions you miss during quizzes will appear here for targeted review.</div></div>';
+    return;
+  }
+  const grouped = {};
+  wa.forEach(w => { const t = w.topic||'General'; if (!grouped[t]) grouped[t]=[]; grouped[t].push(w); });
+  let html = '';
+  Object.entries(grouped).forEach(([topic, items]) => {
+    html += `<div class="wrong-topic-group"><div class="wrong-topic-header">${escHtml(topic)} <span class="badge badge-red">${items.length}</span></div>`;
+    items.forEach(w => {
+      const q = w.question;
+      const correct = (q.type==='mc'||q.type==='tf') ? (q.opts?.[q.ans]||q.ans) : q.ans;
+      html += `<div class="review-item incorrect-item" style="margin-bottom:8px;">
+        <div class="review-q">${escHtml(q.q)}</div>
+        <div class="review-answer" style="margin-top:6px;">Correct answer: <strong style="color:var(--success-light)">${escHtml(String(correct))}</strong></div>
+        ${q.exp?`<div style="font-size:12px;color:var(--muted);margin-top:4px;">${escHtml(q.exp)}</div>`:''}
+        ${w.attempts>1?`<div style="font-size:11px;color:var(--error-light);margin-top:4px;">⚠ Missed ${w.attempts}x</div>`:''}
+      </div>`;
+    });
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+function startReDrill() {
+  const wa = getWrongAnswers();
+  if (!wa.length) { showToast('No wrong answers to re-drill!', 'info'); return; }
+  state.isReDrill = true;
+  startQuiz(wa.map(w => w.question));
+  navigate('quiz');
+  showToast('Re-Drill started — ' + wa.length + ' questions', 'info');
+}
+function clearWrongAnswers() {
+  if (!confirm('Clear all wrong answers? This cannot be undone.')) return;
+  saveWrongAnswers([]);
+  renderWrongAnswers();
+  showToast('Wrong answers cleared', 'info');
+}
+
+// ═══════════════════════════════════════
+// NOTES
+// ═══════════════════════════════════════
+function getNotes() { return JSON.parse(localStorage.getItem('voltage_notes')||'{}'); }
+function saveNotes(notes) { localStorage.setItem('voltage_notes', JSON.stringify(notes)); }
+function getNotesTopics() {
+  const numYear = getNumericYear();
+  const isJourneyman = numYear >= 99;
+  const seen = new Set();
+  const topics = [{ id:'general', displayName:'My Notes', icon:'📓' }];
+  ALL_YEAR_TOPICS.forEach(t => {
+    if (t.year >= 99 && !isJourneyman) return;
+    if (!isJourneyman && t.year > numYear) return;
+    if (seen.has(t.displayName)) return;
+    seen.add(t.displayName);
+    topics.push({ id: t.id, displayName: t.displayName, icon: t.icon });
+  });
+  return topics;
+}
+function renderNotes() {
+  const container = document.getElementById('notesContainer');
+  if (!container) return;
+  const notes = getNotes();
+  const topics = getNotesTopics();
+  let tabHtml = '<div class="tab-bar">';
+  topics.forEach((t, i) => {
+    tabHtml += `<button class="tab-btn ${i===0?'active':''}" onclick="switchNoteTab('${t.id}',this)">${t.icon} ${escHtml(t.displayName)}</button>`;
+  });
+  tabHtml += '</div>';
+  let panelsHtml = '';
+  topics.forEach((t, i) => {
+    const note = notes[t.id] || { text:'', updatedAt:null };
+    const ts = note.updatedAt ? 'Last saved: ' + new Date(note.updatedAt).toLocaleString() : 'Not saved yet';
+    panelsHtml += `<div class="tab-panel ${i===0?'active':''}" id="note-panel-${t.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;color:var(--muted);" id="note-ts-${t.id}">${escHtml(ts)}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveNote('${t.id}')">&#128190; Save</button>
+          <button class="btn btn-danger btn-sm" onclick="clearNote('${t.id}')">&#128465; Clear</button>
+        </div>
+      </div>
+      <textarea id="note-text-${t.id}" class="notes-textarea" placeholder="Type your notes for ${escHtml(t.displayName)} here…">${escHtml(note.text||'')}</textarea>
+    </div>`;
+  });
+  container.innerHTML = tabHtml + panelsHtml;
+}
+function switchNoteTab(topicId, btn) {
+  document.querySelectorAll('#notesContainer .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#notesContainer .tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('note-panel-' + topicId);
+  if (panel) panel.classList.add('active');
+}
+function saveNote(topicId) {
+  const ta = document.getElementById('note-text-' + topicId);
+  if (!ta) return;
+  const notes = getNotes();
+  notes[topicId] = { text: ta.value, updatedAt: new Date().toISOString() };
+  saveNotes(notes);
+  const ts = document.getElementById('note-ts-' + topicId);
+  if (ts) ts.textContent = 'Last saved: ' + new Date().toLocaleString();
+  showToast('Note saved!', 'success');
+}
+function clearNote(topicId) {
+  if (!confirm('Clear this note?')) return;
+  const ta = document.getElementById('note-text-' + topicId);
+  if (ta) ta.value = '';
+  const notes = getNotes();
+  notes[topicId] = { text:'', updatedAt: new Date().toISOString() };
+  saveNotes(notes);
+  const ts = document.getElementById('note-ts-' + topicId);
+  if (ts) ts.textContent = 'Last saved: ' + new Date().toLocaleString();
+  showToast('Note cleared', 'info');
+}
+
+// ═══════════════════════════════════════
+// EXPORT & IMPORT DATA
+// ═══════════════════════════════════════
+function exportData() {
+  const data = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    apprenticeYear: state.year,
+    sessions: state.sessions,
+    wrongAnswers: getWrongAnswers(),
+    notes: getNotes(),
+    uploadedFiles: state.uploadedFiles,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'voltage-backup-' + today + '.voltage';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('Data exported successfully! ✅', 'success');
+}
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.voltage,.json';
+  input.onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.sessions && !data.wrongAnswers && !data.notes) { showToast('Invalid .voltage file', 'error'); return; }
+      const choice = await showImportDialog(data);
+      if (!choice) return;
+      if (choice === 'replace') {
+        if (data.sessions) { state.sessions = data.sessions; localStorage.setItem('voltage_sessions', JSON.stringify(data.sessions)); }
+        if (data.wrongAnswers) saveWrongAnswers(data.wrongAnswers);
+        if (data.notes) saveNotes(data.notes);
+        if (data.apprenticeYear) {
+          state.year = data.apprenticeYear;
+          localStorage.setItem('voltage_year', data.apprenticeYear);
+          const ys = document.getElementById('yearSelect'); if (ys) ys.value = data.apprenticeYear;
+          const sr = document.getElementById('sidebarUserRole'); if (sr) sr.textContent = data.apprenticeYear;
+          const tyb = document.getElementById('topbarYearBadge'); if (tyb) tyb.textContent = data.apprenticeYear;
+          buildTopicsGrid(); renderQuickStart();
+        }
+      } else {
+        if (data.sessions) {
+          const ids = new Set(state.sessions.map(s => s.id));
+          state.sessions = [...state.sessions, ...data.sessions.filter(s => !ids.has(s.id))].sort((a,b) => new Date(b.date)-new Date(a.date));
+          localStorage.setItem('voltage_sessions', JSON.stringify(state.sessions));
+        }
+        if (data.wrongAnswers) {
+          const ex = getWrongAnswers();
+          const keys = new Set(ex.map(w => w.qKey));
+          saveWrongAnswers([...ex, ...data.wrongAnswers.filter(w => !keys.has(w.qKey))]);
+        }
+        if (data.notes) {
+          const en = getNotes();
+          Object.entries(data.notes).forEach(([k,v]) => { if (!en[k] || !en[k].text) en[k] = v; });
+          saveNotes(en);
+        }
+      }
+      const sc = data.sessions?.length||0, wc = data.wrongAnswers?.length||0, nc = Object.keys(data.notes||{}).length;
+      showToast('Import complete: ' + sc + ' sessions, ' + wc + ' wrong answers, ' + nc + ' note tabs', 'success');
+      renderDashboard(); updateWrongAnswersBadge();
+    } catch(err) { showToast('Import failed: ' + err.message, 'error'); }
+  };
+  input.click();
+}
+function showImportDialog(data) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('importModal');
+    const sc = data.sessions?.length||0, wc = data.wrongAnswers?.length||0, nc = Object.keys(data.notes||{}).length;
+    document.getElementById('importSummary').innerHTML = `
+      <div style="background:var(--navy-light);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">File contains:</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <span class="badge badge-blue">📝 ${sc} sessions</span>
+          <span class="badge badge-red">❌ ${wc} wrong answers</span>
+          <span class="badge badge-gold">📓 ${nc} note tabs</span>
+          ${data.apprenticeYear?`<span class="badge badge-green">🎓 ${escHtml(data.apprenticeYear)}</span>`:''}
+        </div>
+      </div>`;
+    overlay.classList.add('open');
+    document.getElementById('importBtnReplace').onclick = () => { overlay.classList.remove('open'); resolve('replace'); };
+    document.getElementById('importBtnMerge').onclick = () => { overlay.classList.remove('open'); resolve('merge'); };
+    document.getElementById('importBtnCancel').onclick = () => { overlay.classList.remove('open'); resolve(null); };
+  });
 }
 
 // ═══════════════════════════════════════
