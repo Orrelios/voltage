@@ -2091,10 +2091,19 @@ async function generateWithGemini(count, difficulty, focus, types) {
       }
       const text = data.choices?.[0]?.message?.content || '';
       if (!text.trim()) throw new Error('Empty response from model');
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) throw new Error('Could not parse AI response');
-      return JSON.parse(jsonMatch[0]);
-    } catch (err) {
+const jsonMatch = text.match(/\[[\s\S]*\]/);
+if (!jsonMatch) throw new Error('Could not parse AI response');
+try {
+  return JSON.parse(jsonMatch[0]);
+} catch(e) {
+  const cleaned = jsonMatch[0]
+    .replace(/,\s*}/g, '}')
+    .replace(/,\s*\]/g, ']')
+    .replace(/[\x00-\x1F\x7F]/g, ' ')
+    .replace(/\n/g, ' ')
+    .trim();
+  return JSON.parse(cleaned);
+}    } catch (err) {
       lastError = err;
       console.warn(`Model ${model} failed:`, err.message);
     }
